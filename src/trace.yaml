@@ -77,7 +77,7 @@ children:
     - name: dev_hard_start_xmit:0
       rules:
       - <<: *rule_msg
-        msg: skb is successfully sent to the NIC driver
+        msg: skb is successfully sent to the NIC driver//数据包成功发送到
   - name: sched
     desc: TC(traffic control) module
     visual: true

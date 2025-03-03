@@ -60,7 +60,9 @@ static bool tracing_support_feat_args_ext()
 	feat_args_ext__destroy(tmp);
 	return err == 0;
 }
-
+/*遍历所有的 trace，检查并调整与其相关的 eBPF 程序，
+ *确保它们符合某些要求，尤其是与 BTF（BPF 类型格式）的兼容性
+ */
 static void tracing_adjust_target()
 {
 	struct bpf_program *prog;
@@ -87,7 +89,7 @@ static void tracing_adjust_target()
 #endif
 	}
 }
-
+/*直接自动挂载*/
 static int tracing_trace_attach()
 {
 	return tracing__attach(skel);
@@ -182,7 +184,7 @@ static int tracing_trace_load()
 		pr_err("failed to prepare load\n");
 		goto err;
 	}
-
+	
 	tracing_adjust_target();
 	if (tracing__load(skel)) {
 		pr_err("failed to load tracing-based eBPF\n");

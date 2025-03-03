@@ -55,31 +55,23 @@ again:
 
 static int probe_trace_attach()
 {
-	bool auto_attach = false;
 	char kret_name[128];
 	trace_t *trace;
-
-again:
+	/*1. 手动加载挂载点*/
 	trace_for_each(trace) {
-		if ((auto_attach && !(trace->status & TRACE_ATTACH_MANUAL)) ||
-		    (!auto_attach && (trace->status & TRACE_ATTACH_MANUAL))) {
-			probe_trace_attach_manual(trace->prog, trace->name, false);
-			if (!trace_is_ret(trace))
-				continue;
+		/*需要手动挂载*/
+		if (!(trace->status & TRACE_ATTACH_MANUAL))
+			continue;
+		/*手动挂载kprobe kretprobe*/
+		probe_trace_attach_manual(trace->prog, trace->name, false);
+		if (!trace_is_ret(trace))
+			continue;
 
-			sprintf(kret_name, "ret%s", trace->prog);
-			probe_trace_attach_manual(kret_name, trace->name, true);
-		}
+		sprintf(kret_name, "ret%s", trace->prog);
+		probe_trace_attach_manual(kret_name, trace->name, true);
 	}
-
-	if (!auto_attach && kprobe__attach(skel)) {
-		/* failed to auto attach, attach manually */
-		auto_attach = true;
-		pr_warn("failed to auto attach kprobe, trying manual attach...\n");
-		goto again;
-	}
-
-	return 0;
+	/*2. 自动加载挂载点*/
+	return kprobe__attach(skel);
 }
 
 /* In kprobe, we only enable the monitor for the traces with "any" rule */
@@ -102,13 +94,16 @@ static void probe_check_monitor()
 	}
 }
 
+/*加载基于 kprobe 的 eBPF 程序，
+包括初始化参数、加载 eBPF 程序、配置性能事件映射表和其他相关设置*/
 static int probe_trace_load()
 {
+	/*1. 定义并初始化 bpf_object_open_opts 结构体*/
 	DECLARE_LIBBPF_OPTS(bpf_object_open_opts, opts,
 		.btf_custom_path = trace_ctx.args.btf_path,
 	);
 	int i = 0;
-
+	/*2. 使用预定义的 kprobe skeleton 打开 eBPF 程序，并应用初始化的 opts 配置 */
 	skel = kprobe__open_opts(&opts);
 	if (!skel) {
 		pr_err("failed to open kprobe-based eBPF\n");
@@ -116,19 +111,37 @@ static int probe_trace_load()
 	}
 	pr_debug("eBPF is opened successfully\n");
 
-	/* set the max entries of perf event map to current cpu count */
+	/* 3. 设置 perf event map 的最大条目数 
+	 *    将 perf event map 的最大条目数设置为当前 CPU 数量
+	 */
 	bpf_map__set_max_entries(skel->maps.m_event, get_nprocs_conf());
+
+	/* 4. 初始化 BPF 程序的类型 
+	 *    配置为 kprobe 类型的 BPF 程序
+	 */
 	bpf_func_init(skel, BPF_PROG_TYPE_KPROBE);
 
+	/* 5. 将 skeleton 的 BPF 对象指针保存到 trace_ctx 的 obj 字段 */
 	trace_ctx.obj = skel->obj;
+
+	/* 6. 执行预加载和加载操作 
+	 *    trace_pre_load 检查并禁用无效或未启用的程序，
+	 *    kprobe__load 加载 BPF 程序 
+	 */
 	if (trace_pre_load() || kprobe__load(skel)) {
 		pr_err("failed to load kprobe-based eBPF\n");
 		goto err;
 	}
 	pr_debug("eBPF is loaded successfully\n");
 
+	/* 7. 配置运行时参数 
+	 *    将用户传递的配置参数写入到 BPF 的全局 BSS 段
+	 */
 	bpf_set_config(skel, bss, trace_ctx.bpf_args);
-
+	
+	/* 8. 初始化每个 CPU 的链表 
+	 *    遍历所有可能的 CPU，将每个 CPU 对应的链表初始化为一个空列表
+	 */
 	for (; i < ARRAY_SIZE(cpus); i++)
 		INIT_LIST_HEAD(&cpus[i]);
 
