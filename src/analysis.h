@@ -98,6 +98,7 @@ typedef struct analyzer {
 #define ANALY_ENTRY_DLIST	(1 << 4)
 
 #define ANALYZER(name) analyzer_##name
+
 #define DEFINE_ANALYZER_PART(name, type, mode_mask)			\
 	analyzer_result_t analyzer_##name##_exit(trace_t *trace,	\
 		analy_exit_t *e) __attribute__((weak));			\
@@ -110,10 +111,13 @@ typedef struct analyzer {
 	};								\
 	analyzer_result_t analyzer_##name##_##type(trace_t *trace,	\
 		analy_##type##_t *e)
+
 #define DEFINE_ANALYZER_ENTRY(name, mode)				\
 	DEFINE_ANALYZER_PART(name, entry, mode)
+
 #define DEFINE_ANALYZER_EXIT(name, mode)				\
 	DEFINE_ANALYZER_PART(name, exit, mode)
+
 #define DEFINE_ANALYZER_EXIT_FUNC(name)					\
 	analyzer_result_t analyzer_##name##_exit(trace_t *trace,	\
 		analy_exit_t *e)

@@ -135,35 +135,45 @@ static analy_entry_t *analy_entry_from_dlist(data_list_t *dlist)
 	entry->cpu = dlist->cpu;
 	return entry;
 }
-
+/**
+ * 用于 输出 分析的结果
+ * 它将分析器处理过的结果格式化成易于阅读的日志形式，
+ * 包含详细的事件信息、延迟、规则匹配情况等
+ **/
 static void analy_entry_output(analy_entry_t *entry, analy_entry_t *prev)
 {
 	static char buf[1024], tinfo[512], func_range[512], __func_range[500];
-	bool date = trace_ctx.args.date;
+	bool date = trace_ctx.args.date;//日期格式
 	event_t *e = entry->event;
 	rule_t *rule;
 	trace_t *t;
 
+	/*1. 根据entry 获取对应的 trace*/
 	t = get_trace_from_analy_entry(entry);
-	pr_debug("output entry(%llx)\n", PTR2X(entry));
+	pr_debug("output entry(%llx)\n", PTR2X(entry));//打印调试信息，显示当前条目的地址
+
+	/*2. 处理 FUNC_TYPE_TINY 类型的事件*/
 	if (e->meta == FUNC_TYPE_TINY) {
-		ts_print_ts(buf, ((tiny_event_t *)(void *)e)->ts, date);
-		sprintf_end(buf, "[%-20s]", t->name);
+		ts_print_ts(buf, ((tiny_event_t *)(void *)e)->ts, date);//输出时间信息
+		sprintf_end(buf, "[%-20s]", t->name);//输出跟踪点的信息
 		goto do_latency;
 	}
 
+	/*3. 处理延迟（Latency）模式*/
 	if (trace_ctx.mode == TRACE_MODE_LATENCY) {
-		trace_t *t1, *t2;
+		trace_t *t1, *t2;/*分别表示延迟的起始函数和结束函数*/
 
 		t1 = get_trace(e->latency_func1);
 		t2 = get_trace(e->latency_func2);
-		sprintf(__func_range, "%s -> %s", t1->name, t2->name);
+		sprintf(__func_range, "%s -> %s", t1->name, t2->name);//起始到结束函数的字符串
 		sprintf(func_range, "[%-36s]", __func_range);
 	} else {
 		func_range[0] = '\0';
 	}
 
+	/*4. 处理详细模式 (Detail Mode) 或 DROP 模式*/
 	if (trace_ctx.detail) {
+		/*强转为 detail_event_t 结构体*/
 		detail_event_t *detail = (void *)e;
 		static char ifbuf[IF_NAMESIZE];
 		char *ifname = detail->ifname;
@@ -172,7 +182,7 @@ static void analy_entry_output(analy_entry_t *entry, analy_entry_t *prev)
 			ifname = if_indextoname(detail->ifindex, ifbuf);
 			ifname = ifname ?: "";
 		}
-
+		/*将详细的信息放入 tinfo 中*/
 		sprintf(tinfo, "[%x][%-20s]%s[cpu:%-3u][%-5s][pid:%-7u][%-12s][ns:%u] ",
 			detail->key, t->name, func_range, entry->cpu, ifname,
 			detail->pid, detail->task, detail->netns);
@@ -180,27 +190,32 @@ static void analy_entry_output(analy_entry_t *entry, analy_entry_t *prev)
 		sprintf(tinfo, "[%-20s]%s ", t->name, func_range);
 	}
 
+	/*5. 打印 Socket 或 Packet 信息*/
 	if (trace_using_sk(t))
-		ts_print_sock(buf, &e->ske, tinfo, trace_ctx.args.date);
+		ts_print_sock(buf, &e->ske, tinfo, trace_ctx.args.date);//打印 Socket 相关信息
 	else
-		ts_print_packet(buf, &e->pkt, tinfo, trace_ctx.args.date);
+		ts_print_packet(buf, &e->pkt, tinfo, trace_ctx.args.date);//打印 Packet 相关信息
 
+	/*6. 返回信息的处理*/
 	if ((entry->status & ANALY_ENTRY_RETURNED) && trace_ctx.args.ret)
 		sprintf_end(buf, PFMT_EMPH_STR(" *return: %d*"),
 			    (int)entry->priv);
 
+	/*7. 处理延迟显示*/
 do_latency:
 	if (prev && trace_ctx.args.latency_show) {
 		u32 delta;
-
+		/*获取时延*/
 		delta = get_entry_dela_us(entry, prev);
+		/*将时延加在buf结尾处中*/
 		sprintf_end(buf, " latency: %d.%03dms", delta / 1000,
 			    delta % 1000);
 	}
-
+	/*8. 分析器中的数据处理信息*/
 	if (entry->msg)
 		sprintf_end(buf, "%s", entry->msg);
 
+	/*9. 输出规则相关信息*/
 	if (!entry->rule)
 		goto out;
 
@@ -218,9 +233,11 @@ do_latency:
 	default:
 		break;
 	}
+	/*10. 输出日志*/
 out:
 	pr_info("%s\n", buf);
 
+	/*11. 输出调用栈*/
 #ifdef __F_STACK_TRACE
 	if (trace_is_stack(t) && e->meta != FUNC_TYPE_TINY)
 		trace_ctx.ops->print_stack(e->stack_id);
@@ -340,8 +357,8 @@ static int try_run_entry(trace_t *trace, analyzer_t *analyzer,
 	if (analyzer && (analyzer->mode & mode) == mode &&
 	    analyzer->analy_entry)
 		return analyzer->analy_entry(trace, entry);
-
-	return RESULT_CONT;
+ 
+	return RESULT_CONT; 
 }
 
 static int try_run_exit(trace_t *trace, analyzer_t *analyzer,
@@ -361,31 +378,33 @@ static inline void rule_run_ret(analy_entry_t *entry, trace_t *trace, int ret)
 
 	list_for_each_entry(rule, &trace->rules, list) {
 		switch (rule->type) {
-		case RULE_RETURN_ANY:
+		case RULE_RETURN_ANY://任何返回值均匹配
 			hit = true;
 			break;
-		case RULE_RETURN_EQ:
+		case RULE_RETURN_EQ://返回值等于规则的 expected
 			hit = rule->expected == ret;
 			break;
 		case RULE_RETURN_RANGE:
-			hit = rule->range.min < ret && rule->range.max > ret;
+			hit = rule->range.min < ret && rule->range.max > ret;//返回值在规则的 range 范围内
 			break;
-		case RULE_RETURN_LT:
+		case RULE_RETURN_LT://返回值小于规则的 expected
 			hit = rule->expected < ret;
 			break;
-		case RULE_RETURN_GT:
+		case RULE_RETURN_GT://返回值大于规则的 expected
 			hit = rule->expected > ret;
 			break;
-		case RULE_RETURN_NE:
+		case RULE_RETURN_NE://返回值不等于规则的 expected
 			hit = rule->expected != ret;
 			break;
 		default:
 			continue;
 		}
+		/*规则未命中，跳过当前规则，执行下一个规则*/
 		if (!hit)
 			continue;
-		entry->rule = rule;
-		if (!mode_has_context())
+		
+		entry->rule = rule;//将命中的规则指针存储到当前分析条目 entry->rule 中
+		if (!mode_has_context())//如果当前运行模式不需要上下文，则直接退出规则遍历
 			break;
 		switch (rule->level) {
 		case RULE_INFO:
@@ -526,6 +545,10 @@ static int ctx_handle_ret(data_list_t *dlist, analy_ctx_t **analy_ctx)
 	return 0;
 }
 
+/*实际数据处理函数
+ *TRACE_MODE_DIAG
+ *TRACE_MODE_TIMELINE
+ */
 static void ctx_poll_cb(data_list_t *dlist)
 {
 	fake_analy_ctx_t *fake;
@@ -540,7 +563,7 @@ static void ctx_poll_cb(data_list_t *dlist)
 			return;
 		goto check_pending;
 	}
-
+	/*1.创建分析条目*/
 	entry = analy_entry_from_dlist(dlist);
 	if (!entry) {
 		pr_err("entry alloc failed\n");
@@ -549,14 +572,14 @@ static void ctx_poll_cb(data_list_t *dlist)
 	e = entry->event;
 	pr_debug("create entry: %llx, %x, size: %u\n", PTR2X(entry),
 		 e->key, dlist->size);
-
+	/*2.获取伪上下文*/
 	fake = analy_fake_ctx_fetch(e->key);
-	if (!fake) {
+	if (!fake) { 
 		pr_err("analy context alloc failed\n");
 		return;
 	}
 	analy_ctx = fake->ctx;
-
+	/*3.获取事件对应的 trace*/
 	trace = get_trace_from_analy_entry(entry);
 	if (!trace) {
 		pr_err("trace not found:%d\n", e->func);
@@ -568,7 +591,7 @@ static void ctx_poll_cb(data_list_t *dlist)
 	entry->ctx = analy_ctx;
 	entry->fake_ctx = fake;
 
-	/* run the global analyzer */
+	/* 调用 trace 分析器 run the global analyzer */
 	analyzer = trace_ctx.ops->analyzer;
 	if (try_run_entry(trace, analyzer, entry))
 		goto check_pending;
@@ -583,7 +606,7 @@ static void ctx_poll_cb(data_list_t *dlist)
 		put_fake_analy_ctx(fake);
 		hlist_del(&fake->hash);
 	}
-
+	/*将条目添加到上下文*/
 	list_add_tail(&entry->list, &analy_ctx->entries);
 check_pending:
 	if (analy_ctx->refs <= 0) {
@@ -592,7 +615,9 @@ check_pending:
 		analy_ctx_output(analy_ctx);
 	}
 }
-
+/*TRACE_MODE_DIAG
+ *TRACE_MODE_TIMELINE
+ */
 void ctx_poll_handler(void *raw_ctx, int cpu, void *data, u32 size)
 {
 	do_async_poll(cpu, data, size, ctx_poll_cb);
@@ -621,14 +646,15 @@ static inline analy_entry_t *alloc_entry_from_data(data_list_t *dlist)
 	init_entry_from_data(entry, dlist);
 	return entry;
 }
-
+/*对采集到的单条数据 analy_entry_t 执行分析处理*/
 static inline void entry_basic_poll(analy_entry_t *entry)
 {
 	trace_t *trace;
-
+	/*1.从 analy_entry_t 中获取 trace_t 信息*/
 	trace = get_trace_from_analy_entry(entry);
+	/*2.尝试运行与 trace 绑定的 entry 分析器*/
 	try_run_entry(trace, trace->analyzer, entry);
-
+	/*3.如果需要分析返回值，调用 exit 分析器*/
 	if (trace_analyse_ret(trace)) {
 		analy_exit_t analy_exit = {
 			.event = {
@@ -638,10 +664,10 @@ static inline void entry_basic_poll(analy_entry_t *entry)
 		};
 		try_run_exit(trace, trace->analyzer, &analy_exit);
 	}
-
+	/*4.输出 entry 的分析结果*/
 	analy_entry_output(entry, NULL);
 }
-
+/*TRACE_MODE_SOCK*/
 static void dlist_poll_cb(data_list_t *dlist)
 {
 	analy_entry_t entry = {};
@@ -651,20 +677,28 @@ static void dlist_poll_cb(data_list_t *dlist)
 	free(dlist);
 }
 
+/*TRACE_MODE_BASIC
+ *TRACE_MODE_DROP
+ *TRACE_MODE_MONITOR
+ */
 void basic_poll_handler(void *ctx, int cpu, void *data, u32 size)
 {
 	analy_entry_t entry = {
 		.event = data,
-		.cpu = cpu
+		.cpu = cpu 
 	};
+	/*对采集到的单条数据 analy_entry_t 执行分析处理*/
 	entry_basic_poll(&entry);
 }
-
+/*TRACE_MODE_SOCK*/
 void async_poll_handler(void *ctx, int cpu, void *data, u32 size)
 {
 	do_async_poll(cpu, data, size, dlist_poll_cb);
 }
 
+/*TRACE_MODE_LATENCY
+ *TRACE_MODE_RTT
+ */
 int stats_poll_handler()
 {
 	int map_fd = bpf_object__find_map_fd_by_name(trace_ctx.obj, "m_stats");
@@ -755,20 +789,25 @@ int func_stats_poll_handler()
 
 	return 0;
 }
-
+/* TRACE_MODE_LATENCY模式的回调函数
+ * trace_ctx.ops->trace_poll=TRACE_MODE_LATENCY
+ */
 void latency_poll_handler(void *ctx, int cpu, void *data, u32 size)
 {
+	/*1. 将内核中采集到的数据放入event_t结构体中*/
 	analy_entry_t entry = {
 		.event = data,
 		.cpu = cpu,
 	};
 	static char info[1024];
 	u32 delta;
-
+	/*2. 获取到延迟数据*/
 	delta = entry.event->latency;
 	sprintf(info, " latency: %d.%03dms", delta / 1000,
 		delta % 1000);
+	/*3. 记录到msg中*/
 	entry_set_msg(&entry, info);
+	/*4. 输出*/
 	analy_entry_output(&entry, NULL);
 }
 
@@ -992,7 +1031,7 @@ DEFINE_ANALYZER_ENTRY(iptable, TRACE_MODE_ALL_MASK)
 	return RESULT_CONT;
 }
 DEFINE_ANALYZER_EXIT_FUNC_DEFAULT(iptable)
-
+/*qdisc 对应挂载点进入时，进行数据处理*/
 DEFINE_ANALYZER_ENTRY(qdisc, TRACE_MODE_ALL_MASK)
 {
 	define_pure_event(qdisc_event_t, event, e->event);
@@ -1002,10 +1041,12 @@ DEFINE_ANALYZER_ENTRY(qdisc, TRACE_MODE_ALL_MASK)
 	msg[0] = '\0';
 	hz = kernel_hz();
 	hz = hz > 0 ? hz : 1;
+	/*将qdisc相关数据存储到msg指向的缓冲区中*/
 	sprintf(msg, PFMT_EMPH_STR(" *qdisc state: %x, flags: %x, "
 		"last-update: %llums, len: %u*"), event->state,
 		event->flags, (1000 * event->last_update) / hz,
 		event->qlen);
+	/*将生成的消息与当前分析条目 (analy_entry_t) 绑定，供后续处理或输出使用*/
 	entry_set_msg(e, msg);
 
 	return RESULT_CONT;
@@ -1014,12 +1055,15 @@ DEFINE_ANALYZER_EXIT_FUNC_DEFAULT(qdisc)
 
 DEFINE_ANALYZER_ENTRY(rtt, TRACE_MODE_ALL_MASK)
 {
+	/*1.通过define_pure_event提取rtt事件数据*/
 	define_pure_event(rtt_event_t, event, e->event);
 	char *msg = malloc(1024);
 
 	msg[0] = '\0';
+	/*2.将first_rtt和last_rtt格式化成字符串，用于输出和日志记录*/
 	sprintf(msg, PFMT_EMPH_STR(" *rtt:%ums, rtt_min:%ums*"),
 		event->first_rtt, event->last_rtt);
+	/*3.entry_set_msg将聚合后的消息绑定到当前分析条目analy_entry_t*/
 	entry_set_msg(e, msg);
 
 	return RESULT_CONT;
