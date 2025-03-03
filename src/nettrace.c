@@ -307,7 +307,7 @@ static void do_parse_args(int argc, char *argv[])
 			.desc = "show nettrace version",
 		},
 	};
-
+	/*解析所有命令行参数,将参数值存入对应变量*/
 	if (parse_args(argc, argv, &config, opts, ARRAY_SIZE(opts)))
 		goto err;
 
@@ -390,12 +390,13 @@ static void do_exit(int code)
 
 int main(int argc, char *argv[])
 {
+	/*1.初始化跟踪组*/
 	init_trace_group();
 	do_parse_args(argc, argv);
-
+	/*2.跟踪点有效性标记*/
 	if (trace_prepare())
 		goto err;
-
+	/*3.加载并附加eBPF程序*/
 	if (trace_bpf_load_and_attach()) {
 		pr_err("failed to load bpf\n");
 		goto err;
@@ -405,6 +406,7 @@ int main(int argc, char *argv[])
 	signal(SIGINT, do_exit);
 
 	pr_info("begin trace...\n");
+	/*4.启动网络追踪功能*/
 	trace_poll(trace_ctx);
 	do_exit(0);
 	return 0;

@@ -99,9 +99,9 @@ typedef struct {
 typedef struct trace_args {
 	bool timeline;
 	bool ret;
-	bool intel;
-	bool intel_quiet;
-	bool intel_keep;
+	bool intel;			//diag
+	bool intel_quiet;	//diag_quiet
+	bool intel_keep;	//diag_keep
 	bool basic;
 	bool monitor;
 	bool drop;
@@ -111,12 +111,12 @@ typedef struct trace_args {
 	bool sock;
 	bool netns_current;
 	bool force;
-	bool latency_show;
+	bool latency_show;	//
 	bool rtt;
 	bool rtt_detail;
-	bool latency;
+	bool latency;		//
 	bool traces_noclone;
-	u32  min_latency;
+	u32  min_latency;	//
 	char *traces;
 	char *traces_stack;
 	char *trace_matcher;
@@ -127,22 +127,22 @@ typedef struct trace_args {
 	u32  count;
 	char *btf_path;
 } trace_args_t;
-
+/*该结构体定义了操作和回调方法的接口集合*/
 typedef struct {
 	/* open and initialize the bpf program */
-	int (*trace_load)();
+	int (*trace_load)();//加载并初始化 BPF 程序
 	/* load and attach the bpf program */
-	int (*trace_attach)();
-	void (*trace_poll)(void *ctx, int cpu, void *data, u32 size);
-	int (*trace_anal)(event_t *e);
-	void (*trace_close)();
-	void (*trace_ready)();
-	void (*print_stack)(int key);
-	void (*trace_feat_probe)();
-	bool (*trace_supported)();
-	void (*prepare_traces)();
+	int (*trace_attach)();//加载并附加 BPF 程序到具体的内核探针
+	void (*trace_poll)(void *ctx, int cpu, void *data, u32 size);//数据处理函数
+	int (*trace_anal)(event_t *e);	//分析单个事件数据
+	void (*trace_close)();			//关闭并释放追踪程序所占用的资源
+	void (*trace_ready)();			//表示追踪程序已准备好，可以开始采集和处理事件数据。
+	void (*print_stack)(int key);	//打印指定的调用栈信息
+	void (*trace_feat_probe)();		//探测并打印当前系统或追踪程序支持的功能特性
+	bool (*trace_supported)();		//检查当前系统是否支持追踪功能
+	void (*prepare_traces)();		//提前涉及到的跟踪点
 	int  (*raw_poll)();
-	struct analyzer *analyzer;
+	struct analyzer *analyzer;		//指向一个分析器结构体
 } trace_ops_t;
 
 typedef struct {
