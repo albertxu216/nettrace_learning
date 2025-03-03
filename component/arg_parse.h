@@ -26,7 +26,7 @@ typedef struct {
 	void	*dest;
 	enum option_type type;
 	void	*set;
-	char	*desc;
+	char	*desc;//
 	bool	required;
 	int	key;
 	bool	__is_set;
