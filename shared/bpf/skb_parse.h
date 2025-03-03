@@ -14,7 +14,7 @@
 
 
 #define MAX_ENTRIES 256
-
+/*存储事件数据*/
 struct {
 	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
 	__uint(key_size, sizeof(int));
@@ -22,6 +22,10 @@ struct {
 	__uint(max_entries, MAX_ENTRIES);
 } m_event SEC(".maps");
 
+/* 存储用户给出的参数信息，用于动态调整nettrace中的 BPF 程序行为；
+ * CONFIG宏从内核态读取
+ * 参数
+ * */
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
 	__uint(key_size, sizeof(int));
