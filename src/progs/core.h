@@ -2,10 +2,10 @@
 #define _H_PROG_CORE
 
 typedef struct {
-	u16 func1;
-	u16 func2;
-	u32 ts1;
-	u32 ts2;
+	u16 func1;	//第一个函数的索引
+	u16 func2;	//第二个函数的索引
+	u32 ts1;	// 第一个时间戳（通常是某个事件的发生时间）
+	u32 ts2;	// 第二个时间戳（通常是与 ts1 相关的另一个事件时间）
 } match_val_t;
 
 typedef struct {

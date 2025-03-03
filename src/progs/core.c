@@ -13,7 +13,7 @@
 #ifdef KERN_VER
 __u32 kern_ver SEC("version") = KERN_VER;
 #endif
-
+/*它存储每个函数的返回值计数*/
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(key_size, sizeof(int));
@@ -30,6 +30,9 @@ struct {
 } m_stack SEC(".maps");
 #endif
 
+/* 存储已经匹配的事件或数据包
+ * key是skb的地址，value是match_val_t结构体
+ */
 struct {
 #ifdef BPF_MAP_TYPE_LRU_HASH
 	__uint(type, BPF_MAP_TYPE_LRU_HASH);
@@ -48,6 +51,7 @@ struct {
 	__uint(max_entries, 512);
 } m_stats SEC(".maps");
 
+/*追踪事件时记录调用栈信息*/
 #ifdef __F_STACK_TRACE
 static inline void try_trace_stack(context_info_t *info)
 {
@@ -64,13 +68,13 @@ static inline int filter_by_netns(context_info_t *info)
 {	
 	return 0;
 }
-
+/*将 eBPF 程序捕获的事件数据输出到 perf 缓冲区*/
 static __always_inline void do_event_output(context_info_t *info,
 					    const int size)
 {
 	EVENT_OUTPUT_PTR(info->ctx, info->e, size);
 }
-
+/*用于检查速率限制，控制事件输出频率，防止性能影响*/
 static __always_inline int check_rate_limit(bpf_args_t *args)
 {
 	u64 last_ts = args->__last_update, ts = 0;
@@ -99,7 +103,7 @@ static __always_inline int check_rate_limit(bpf_args_t *args)
 
 	return 0;
 }
-
+/*用于在轻量级追踪场景下生成并发送事件*/
 static inline void handle_tiny_output(context_info_t *info)
 {
 	tiny_event_t e = {
@@ -149,7 +153,7 @@ static inline void free_map_ctx(bpf_args_t *args, void *key)
 {
 	bpf_map_delete_elem(&m_matched, key);
 }
-
+/*初始化上下文匹配*/
 static inline void init_ctx_match(void *skb, u16 func, bool ts)
 {
 	match_val_t matched = {
@@ -192,7 +196,8 @@ static inline int pre_tiny_output(context_info_t *info)
 		get_ret(info);
 	return 1;
 }
-
+/*计算函数调用的延迟，并将延迟结果更新到相应的 match_val 数据结
+构*/
 static inline int pre_handle_latency(context_info_t *info,
 				     match_val_t *match_val)
 {
@@ -251,6 +256,8 @@ static inline bool trace_mode_latency(bpf_args_t *args)
  *    0: valid and continue
  *    1: valid and return
  */
+/*对事件进行预处理，计算事件延迟、检查追踪模
+式、确认是否输出事件*/
 static inline int pre_handle_entry(context_info_t *info, u16 func)
 {
 	bpf_args_t *args = (void *)info->args;
@@ -505,7 +512,7 @@ static inline int default_handle_entry(context_info_t *info)
 
 DEFINE_ALL_PROBES(KPROBE_DEFAULT, TP_DEFAULT, FNC)
 
-
+ 
 #ifdef __PROG_TYPE_TRACING
 #define info_tp_args(info, offset, index) (void *)((u64 *)(info->ctx) + index)
 #else

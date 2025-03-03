@@ -34,21 +34,22 @@ typedef struct {
 	u64  event_count;
 } bpf_args_t;
 
+/*存储事件追踪相关的信息*/
 typedef struct {
-	u16		meta;
-	u16		func;
+	u16		meta;//事件的元信息
+	u16		func;//触发事件的函数
 	u32		key;
 	union {
-		packet_t	pkt;
-		sock_t		ske;
+		packet_t	pkt;//数据包相关的信息
+		sock_t		ske;//套接字相关的信息
 	};
 	union {
 		/* For FEXIT program only for now */
 		u64	retval;
 		struct {
-			u16 latency_func1;
-			u16 latency_func2;
-			u32 latency;
+			u16 latency_func1;//延迟中的开始函数
+			u16 latency_func2;//延迟中的结束函数
+			u32 latency;//两函数见的延迟
 		};
 	};
 #ifdef __F_STACK_TRACE
